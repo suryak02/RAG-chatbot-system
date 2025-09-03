@@ -85,6 +85,8 @@ export class DocumentProcessor {
   static async processDocument(
     document: ProcessedDocument,
     chunkSize = 1000,
+    sourceLabel = "openai-docs",
+    namespace?: string,
   ): Promise<
     Array<{
       content: string
@@ -93,6 +95,7 @@ export class DocumentProcessor {
         title: string
         url?: string
         section?: string
+        namespace?: string
       }
     }>
   > {
@@ -103,6 +106,7 @@ export class DocumentProcessor {
         title: string
         url?: string
         section?: string
+        namespace?: string
       }
     }> = []
 
@@ -112,9 +116,10 @@ export class DocumentProcessor {
       results.push({
         content: chunk,
         metadata: {
-          source: "openai-docs",
+          source: sourceLabel,
           title: document.title,
           url: document.url,
+          namespace,
         },
       })
     }
@@ -126,10 +131,11 @@ export class DocumentProcessor {
         results.push({
           content: `${section.title}\n\n${chunk}`,
           metadata: {
-            source: "openai-docs",
+            source: sourceLabel,
             title: document.title,
             url: document.url,
             section: section.title,
+            namespace,
           },
         })
       }

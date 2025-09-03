@@ -8,6 +8,7 @@ export interface DocumentChunk {
     title: string
     url?: string
     section?: string
+    namespace?: string
   }
 }
 
@@ -39,8 +40,15 @@ export class VectorStore {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
   }
 
-  async similaritySearch(queryEmbedding: number[], k = 5, threshold = 0.7): Promise<DocumentChunk[]> {
-    const similarities = this.documents.map((doc) => ({
+  async similaritySearch(
+    queryEmbedding: number[],
+    k = 5,
+    threshold = 0.7,
+    namespace?: string,
+  ): Promise<DocumentChunk[]> {
+    const pool = namespace ? this.documents.filter((d) => d.metadata.namespace === namespace) : this.documents
+
+    const similarities = pool.map((doc) => ({
       document: doc,
       similarity: this.cosineSimilarity(queryEmbedding, doc.embedding),
     }))
@@ -60,10 +68,20 @@ export class VectorStore {
     this.documents = []
   }
 
+  // Clear only documents that belong to a specific namespace
+  async clearNamespace(namespace: string): Promise<void> {
+    const ns = namespace.trim()
+    this.documents = this.documents.filter((d) => d.metadata.namespace !== ns)
+  }
+
   getDocumentCount(): number {
     return this.documents.length
   }
 }
 
-// Singleton instance
-export const vectorStore = new VectorStore()
+// Singleton instance across dev/HMR and route module reloads
+const globalForVectorStore = globalThis as unknown as { vectorStore?: VectorStore }
+if (!globalForVectorStore.vectorStore) {
+  globalForVectorStore.vectorStore = new VectorStore()
+}
+export const vectorStore = globalForVectorStore.vectorStore

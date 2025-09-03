@@ -1,11 +1,12 @@
 // Core RAG (Retrieval Augmented Generation) service
-import { vectorStore, type DocumentChunk } from "./vector-store"
+import { vectorStore, type DocumentChunk } from "@/lib/vector-store"
 import { getOpenAIClient } from "./openai-client"
 
 export interface RAGQuery {
   question: string
   maxResults?: number
   similarityThreshold?: number
+  namespace?: string
 }
 
 export interface RAGResult {
@@ -27,7 +28,11 @@ export class RAGService {
 
   async query(ragQuery: RAGQuery): Promise<RAGResult> {
     const startTime = Date.now()
-    const { question, maxResults = 5, similarityThreshold = 0.7 } = ragQuery
+    const { question, maxResults = 5, similarityThreshold = 0.7, namespace } = ragQuery
+
+    const isMock = process.env.USE_MOCK_OPENAI === "true" || process.env.DEMO_MODE === "true"
+    // In mock mode, embeddings are synthetic; lower the threshold to always retrieve top matches
+    const effectiveThreshold = isMock ? 0.0 : similarityThreshold
 
     try {
       // Step 1: Generate embedding for the user question
@@ -36,12 +41,17 @@ export class RAGService {
 
       // Step 2: Retrieve relevant documents from vector store
       console.log("Searching vector store...")
-      const relevantChunks = await vectorStore.similaritySearch(queryEmbedding, maxResults, similarityThreshold)
+      const relevantChunks = await vectorStore.similaritySearch(
+        queryEmbedding,
+        maxResults,
+        effectiveThreshold,
+        namespace,
+      )
 
       if (relevantChunks.length === 0) {
         return {
           answer:
-            "I couldn't find any relevant information in the OpenAI documentation to answer your question. Please try rephrasing your question or asking about OpenAI models, APIs, or features.",
+            "I couldn't find relevant information in the current knowledge base to answer your question. Please try rephrasing, or ingest documentation for this topic.",
           sources: [],
           retrievedChunks: 0,
           processingTime: Date.now() - startTime,
@@ -54,7 +64,11 @@ export class RAGService {
 
       // Step 4: Generate response using retrieved context
       console.log("Generating response...")
-      const answer = await this.generateResponse(question, context)
+      // Determine domain label from source metadata
+      const firstSource = relevantChunks[0]?.metadata?.source || "knowledge-base"
+      const domainLabel = firstSource === "openai-docs" ? "OpenAI documentation" : "the provided knowledge base"
+
+      const answer = await this.generateResponse(question, context, domainLabel)
 
       return {
         answer,
@@ -99,24 +113,23 @@ export class RAGService {
     return Array.from(sourceMap.values())
   }
 
-  private async generateResponse(question: string, context: string): Promise<string> {
-    const systemPrompt = `You are an expert assistant for OpenAI's documentation and APIs. Your role is to provide accurate, helpful answers based solely on the provided context from OpenAI's official documentation.
+  private async generateResponse(question: string, context: string, domainLabel: string): Promise<string> {
+    const systemPrompt = `You are an expert assistant for ${domainLabel}. Provide accurate, helpful answers based solely on the provided context.
 
 Guidelines:
-- Answer questions using ONLY the information provided in the context
-- If the context doesn't contain enough information to answer the question, say so clearly
-- Be specific and cite relevant details from the documentation
-- Format your response clearly with proper structure
-- If code examples are mentioned in the context, include them in your response
-- Focus on practical, actionable information
-- If multiple models or approaches are mentioned, explain the differences
-
-Context from OpenAI Documentation:
-${context}`
+- Answer using ONLY the information provided in the context
+- If the context doesn't contain enough information, say so clearly
+- Be specific and cite relevant details from the sources
+- Format your response clearly with structure
+- If code or examples appear in the context, include them when useful
+- Focus on practical, actionable information`
 
     const userPrompt = `Question: ${question}
 
-Please provide a comprehensive answer based on the OpenAI documentation context provided above.`
+Context:
+${context}
+
+Please provide a comprehensive answer based on the context above.`
 
     const response = await this.openaiClient.createChatCompletion([
       { role: "system", content: systemPrompt },

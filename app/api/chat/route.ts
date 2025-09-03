@@ -4,7 +4,7 @@ import { ragService } from "@/lib/rag-service"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message } = body
+    const { message, namespace } = body as { message?: string; namespace?: string }
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message is required and must be a string" }, { status: 400 })
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       question: message.trim(),
       maxResults: 5,
       similarityThreshold: 0.7,
+      namespace: namespace?.trim() || undefined,
     })
 
     return NextResponse.json({

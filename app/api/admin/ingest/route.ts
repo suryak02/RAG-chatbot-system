@@ -1,13 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { IngestionPipeline } from "@/lib/ingestion-pipeline"
+import { IngestionPipeline, type IngestionOptions, type IngestionSource } from "@/lib/ingestion-pipeline"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { useSampleData = true } = body
+    const { useSampleData, source, namespace, clear } = body as {
+      useSampleData?: boolean
+      source?: IngestionSource
+      namespace?: string
+      clear?: boolean
+    }
+
+    // Back-compat mapping: if useSampleData is provided, map to source
+    let resolvedSource: IngestionSource = "openai-sample"
+    if (typeof source === "string") {
+      resolvedSource = source
+    } else if (typeof useSampleData === "boolean") {
+      resolvedSource = useSampleData ? "openai-sample" : "openai-live"
+    }
 
     const pipeline = new IngestionPipeline()
-    const stats = await pipeline.ingestDocumentation(useSampleData)
+    const options: IngestionOptions = {
+      source: resolvedSource,
+      namespace,
+      clear,
+    }
+    const stats = await pipeline.ingestDocumentation(options)
 
     return NextResponse.json({
       success: true,

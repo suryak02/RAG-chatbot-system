@@ -35,6 +35,7 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [namespace, setNamespace] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +58,7 @@ export function ChatInterface() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: input.trim() }),
+        body: JSON.stringify({ message: input.trim(), namespace: namespace.trim() || undefined }),
       })
 
       if (!response.ok) {
@@ -99,22 +100,32 @@ export function ChatInterface() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="w-5 h-5" />
-          OpenAI Documentation Assistant
+          Knowledge Base Assistant
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
+        {/* Optional namespace selector */}
+        <div className="flex items-center gap-2">
+          <Input
+            value={namespace}
+            onChange={(e) => setNamespace(e.target.value)}
+            placeholder="Namespace (optional)"
+            disabled={isLoading}
+            className="max-w-xs"
+          />
+        </div>
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-6">
             {messages.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg mb-2">Ask me anything about OpenAI!</p>
-                <p className="text-sm mb-4">I can help you with models, APIs, best practices, and more.</p>
+                <p className="text-lg mb-2">Ask me anything about the knowledge base!</p>
+                <p className="text-sm mb-4">I can help you with product info, policies, APIs, best practices, and more.</p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  <Badge variant="secondary">GPT-4 features</Badge>
-                  <Badge variant="secondary">Embeddings API</Badge>
-                  <Badge variant="secondary">Function calling</Badge>
-                  <Badge variant="secondary">Fine-tuning</Badge>
+                  <Badge variant="secondary">Hours & policies</Badge>
+                  <Badge variant="secondary">Pricing & plans</Badge>
+                  <Badge variant="secondary">Appointments</Badge>
+                  <Badge variant="secondary">API usage</Badge>
                 </div>
               </div>
             )}
@@ -221,7 +232,7 @@ export function ChatInterface() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about OpenAI models, API usage, best practices..."
+            placeholder="Ask about products, policies, APIs, best practices..."
             disabled={isLoading}
             className="flex-1"
           />

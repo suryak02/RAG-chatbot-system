@@ -1,8 +1,15 @@
 // Complete ingestion pipeline for processing and storing documentation
 import { DocumentationFetcher, type OpenAIDocPage } from "./documentation-fetcher"
 import { DocumentProcessor } from "./document-processor"
-import { vectorStore, type DocumentChunk } from "./vector-store"
+import { vectorStore, type DocumentChunk } from "@/lib/vector-store"
 import { getOpenAIClient } from "./openai-client"
+
+export type IngestionSource = "openai-sample" | "openai-live" | "universal"
+export interface IngestionOptions {
+  source: IngestionSource
+  namespace?: string
+  clear?: boolean
+}
 
 export interface IngestionStats {
   totalPages: number
@@ -30,22 +37,42 @@ export class IngestionPipeline {
     }
   }
 
-  async ingestDocumentation(useSampleData = true): Promise<IngestionStats> {
+  async ingestDocumentation(options: IngestionOptions = { source: "openai-sample" }): Promise<IngestionStats> {
     console.log("Starting documentation ingestion...")
     this.stats.startTime = new Date()
 
     try {
-      // Clear existing documents
-      await vectorStore.clear()
+      const { source, namespace, clear = true } = options
+      // Clear existing documents (unless opted out)
+      if (clear) {
+        if (namespace && namespace.trim().length > 0) {
+          await vectorStore.clearNamespace(namespace)
+        } else {
+          await vectorStore.clear()
+        }
+      }
 
       // Fetch documentation
       let pages: OpenAIDocPage[]
-      if (useSampleData) {
-        console.log("Using sample documentation data...")
-        pages = this.fetcher.getSampleDocumentation()
-      } else {
-        console.log("Fetching live documentation...")
-        pages = await this.fetcher.fetchAllDocumentation()
+      let sourceLabel = "openai-docs"
+      switch (source) {
+        case "openai-sample":
+          console.log("Using sample OpenAI documentation data...")
+          pages = this.fetcher.getSampleDocumentation()
+          sourceLabel = "openai-docs"
+          break
+        case "openai-live":
+          console.log("Fetching live OpenAI documentation...")
+          pages = await this.fetcher.fetchAllDocumentation()
+          sourceLabel = "openai-docs"
+          break
+        case "universal":
+          console.log("Using universal placeholder documentation data...")
+          pages = this.fetcher.getUniversalPlaceholder()
+          sourceLabel = "universal-docs"
+          break
+        default:
+          throw new Error(`Unknown ingestion source: ${source}`)
       }
 
       this.stats.totalPages = pages.length
@@ -54,7 +81,7 @@ export class IngestionPipeline {
       // Process each page
       for (const page of pages) {
         try {
-          await this.processPage(page)
+          await this.processPage(page, sourceLabel, namespace)
         } catch (error) {
           const errorMsg = `Failed to process page ${page.title}: ${error}`
           console.error(errorMsg)
@@ -78,7 +105,7 @@ export class IngestionPipeline {
     }
   }
 
-  private async processPage(page: OpenAIDocPage): Promise<void> {
+  private async processPage(page: OpenAIDocPage, sourceLabel: string, namespace?: string): Promise<void> {
     console.log(`Processing: ${page.title}`)
 
     // Convert to ProcessedDocument format
@@ -90,7 +117,7 @@ export class IngestionPipeline {
     }
 
     // Create chunks
-    const chunks = await DocumentProcessor.processDocument(processedDoc, 800)
+    const chunks = await DocumentProcessor.processDocument(processedDoc, 800, sourceLabel, namespace)
     this.stats.totalChunks += chunks.length
 
     // Generate embeddings and store chunks

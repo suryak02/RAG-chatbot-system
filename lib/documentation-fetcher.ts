@@ -226,4 +226,85 @@ Best practices:
       },
     ]
   }
+
+  // Universal placeholder content for a generic business (industry-agnostic)
+  getUniversalPlaceholder(): OpenAIDocPage[] {
+    return [
+      {
+        url: "local://universal/company-overview",
+        title: "Company Overview",
+        content: `# Company Overview
+
+Welcome to Acme Corp, a multi-location company providing products, subscription plans, and customer support across web and on-site channels. We operate Monday–Saturday with extended evening hours on weekdays.
+
+## Services
+- Professional consultations (virtual and in-person)
+- Standard and premium service packages
+- Product subscriptions and add-ons
+- Priority support plans
+
+## Locations
+- Downtown (Main)
+- Riverside
+- Uptown
+
+## Hours
+- Mon–Fri: 9:00–19:00
+- Sat: 10:00–16:00
+- Sun: Closed
+        `,
+      },
+      {
+        url: "local://universal/policies",
+        title: "Service & Cancellation Policy",
+        content: `# Service & Cancellation Policy
+
+## Appointments & Orders
+- Schedule online or by phone. A valid email and phone number are required.
+- A deposit may be required for extended services or custom orders.
+
+## Cancellations
+- Cancel or reschedule at least 24 hours before the appointment to avoid fees.
+- Late cancellations may incur a 50% service fee. No-shows may be charged in full.
+
+## Late Arrivals
+- Arrivals 10+ minutes late may be shortened or rescheduled to avoid impacting subsequent clients.
+        `,
+      },
+      {
+        url: "local://universal/pricing-memberships",
+        title: "Pricing & Memberships",
+        content: `# Pricing & Memberships
+
+## Standard Pricing (starting from)
+- Consultation: $50
+- Standard service: $95
+- Premium package: $180
+- Add-on (per item): $15
+
+## Membership Plans
+- Silver: 1 basic service per month at 15% off additional services
+- Gold: 2 services per month at 20% off additional services
+- Platinum: 4 services per month at 25% off additional services
+
+Memberships renew monthly and unused services roll over for 1 month.
+        `,
+      },
+      {
+        url: "local://universal/support-faq",
+        title: "Support & FAQ",
+        content: `# Support & FAQ
+
+## Contact
+- Email: support@acmecorp.example
+- Phone: (555) 555-1234
+
+## Frequent Questions
+1. Do you accept walk-ins? Limited walk-ins may be available; online booking is recommended.
+2. What is your refund policy? Service fees are non-refundable once a service has been rendered. Products follow our standard return policy.
+3. Do you offer gift cards? Yes, digital gift cards are available online and at customer service.
+        `,
+      },
+    ]
+  }
 }
