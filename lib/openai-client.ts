@@ -73,11 +73,19 @@ export class OpenAIClient {
     }
 
     const modelToUse = model || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small"
-    const data = await this.postWithRetry<{ data: Array<{ embedding: number[] }> }>("embeddings", {
-      input: text,
-      model: modelToUse,
-    })
-    return data.data[0].embedding
+    try {
+      const data = await this.postWithRetry<{ data: Array<{ embedding: number[] }> }>("embeddings", {
+        input: text,
+        model: modelToUse,
+      })
+      return data.data[0].embedding
+    } catch (error) {
+      if (this.shouldFallbackToMock(error)) {
+        console.warn("OpenAI embeddings failed; falling back to mock due to billing/quota error.")
+        return this.mockEmbedding(text)
+      }
+      throw error
+    }
   }
 
   async createChatCompletion(
@@ -89,16 +97,24 @@ export class OpenAIClient {
     }
 
     const modelToUse = model || process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini"
-    const data = await this.postWithRetry<{ choices: Array<{ message: { content: string } }> }>(
-      "chat/completions",
-      {
-        model: modelToUse,
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 1000,
-      },
-    )
-    return data.choices[0].message.content
+    try {
+      const data = await this.postWithRetry<{ choices: Array<{ message: { content: string } }> }>(
+        "chat/completions",
+        {
+          model: modelToUse,
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 1000,
+        },
+      )
+      return data.choices[0].message.content
+    } catch (error) {
+      if (this.shouldFallbackToMock(error)) {
+        console.warn("OpenAI chat failed; falling back to mock due to billing/quota error.")
+        return this.mockChatCompletion(messages)
+      }
+      throw error
+    }
   }
 
   // --- Mock/offline helpers ---
@@ -177,6 +193,15 @@ export class OpenAIClient {
     const qLine = question ? `Question: ${question}\n\n` : ""
 
     return `${header}\n\n${qLine}${body}`
+  }
+
+  // Decide if we should fall back to mock mode when OpenAI returns errors
+  private shouldFallbackToMock(error: unknown): boolean {
+    const allow = process.env.FALLBACK_TO_MOCK_ON_OPENAI_ERROR === "true"
+    if (!allow) return false
+    const msg = (error instanceof Error ? error.message : String(error)).toLowerCase()
+    // Match common billing/quota/payment failures (402/403, insufficient_quota, billing)
+    return /\b402\b|\b403\b|insufficient_quota|billing|payment/.test(msg)
   }
 }
 

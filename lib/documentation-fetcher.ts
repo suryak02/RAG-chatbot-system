@@ -235,7 +235,7 @@ Best practices:
         title: "Company Overview",
         content: `# Company Overview
 
-Welcome to Acme Corp, a multi-location company providing products, subscription plans, and customer support across web and on-site channels. We operate Monday–Saturday with extended evening hours on weekdays.
+Welcome to Technozis, a multi-location company providing products, subscription plans, and customer support across web and on-site channels. We operate Monday–Saturday with extended evening hours on weekdays.
 
 ## Services
 - Professional consultations (virtual and in-person)
@@ -296,7 +296,7 @@ Memberships renew monthly and unused services roll over for 1 month.
         content: `# Support & FAQ
 
 ## Contact
-- Email: support@acmecorp.example
+- Email: support@technozis.example
 - Phone: (555) 555-1234
 
 ## Frequent Questions

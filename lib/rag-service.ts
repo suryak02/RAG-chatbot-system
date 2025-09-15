@@ -39,14 +39,40 @@ export class RAGService {
       console.log("Generating query embedding...")
       const queryEmbedding = await this.openaiClient.createEmbedding(question)
 
-      // Step 2: Retrieve relevant documents from vector store
+      // Step 2: Prefer uploaded docs exclusively when available
       console.log("Searching vector store...")
-      const relevantChunks = await vectorStore.similaritySearch(
-        queryEmbedding,
-        maxResults,
-        effectiveThreshold,
-        namespace,
-      )
+      const allDocs = await vectorStore.getAllDocuments()
+      const uploadedDocs = allDocs.filter((d) => d.metadata.source === "uploaded")
+      let relevantChunks: DocumentChunk[] = []
+
+      if (uploadedDocs.length > 0) {
+        const scored = uploadedDocs
+          .map((d) => ({ doc: d, sim: this.cosineSimilarity(queryEmbedding, d.embedding) }))
+          .sort((a, b) => b.sim - a.sim)
+        relevantChunks = scored.slice(0, maxResults).map((s) => s.doc)
+        console.log(`Using uploaded knowledge base only (docs=${uploadedDocs.length}).`)
+      } else {
+        // Fall back to mixed store with threshold backoff
+        const thresholds = Array.from(
+          new Set([effectiveThreshold, 0.3, 0.0].filter((t) => t >= 0 && t <= 1)),
+        )
+        for (const t of thresholds) {
+          relevantChunks = await vectorStore.similaritySearch(queryEmbedding, maxResults, t, namespace)
+          if (relevantChunks.length > 0 || t === thresholds[thresholds.length - 1]) {
+            if (relevantChunks.length === 0) {
+              console.warn(
+                `No matches found even at threshold ${t}. Returning top-k (possibly low similarity) results.`,
+              )
+              // Force return top-k by lowering k filter if needed
+              const pool = await vectorStore.getAllDocuments()
+              const nsPool = namespace ? pool.filter((d) => d.metadata.namespace === namespace) : pool
+              relevantChunks = nsPool.slice(0, maxResults)
+            }
+            break
+          }
+          console.log(`No matches at threshold ${t}. Retrying with a lower threshold...`)
+        }
+      }
 
       if (relevantChunks.length === 0) {
         return {
@@ -114,22 +140,29 @@ export class RAGService {
   }
 
   private async generateResponse(question: string, context: string, domainLabel: string): Promise<string> {
-    const systemPrompt = `You are an expert assistant for ${domainLabel}. Provide accurate, helpful answers based solely on the provided context.
+    const allowGeneral = process.env.RAG_ALLOW_GENERAL_KNOWLEDGE === "true"
+
+    const systemPrompt = `You are an expert assistant for ${domainLabel}. Use the provided context as the primary source of truth to answer the user's question clearly and helpfully.
 
 Guidelines:
-- Answer using ONLY the information provided in the context
-- If the context doesn't contain enough information, say so clearly
-- Be specific and cite relevant details from the sources
-- Format your response clearly with structure
-- If code or examples appear in the context, include them when useful
-- Focus on practical, actionable information`
+- Start with a direct one-sentence answer to the question.
+- Synthesize and paraphrase; avoid copying long passages from the context.
+- Cite supporting statements with the source markers using [Source N] that match the context labels.
+- Ignore irrelevant or low-value context; focus on what answers the question.
+- Prefer concise, structured explanations (bullets, short paragraphs, or steps when appropriate).
+- Include code or concrete examples if the question implies it and the context includes them.
+- If the context doesn't contain enough information, say so clearly.${allowGeneral ? "\n- You may add widely accepted general knowledge to clarify gaps, but never contradict the context. If you do, include it under a 'General knowledge' section." : ""}`
 
-    const userPrompt = `Question: ${question}
+    const userPrompt = `Question:
+${question}
 
 Context:
 ${context}
 
-Please provide a comprehensive answer based on the context above.`
+Instructions:
+- Answer the question directly first.
+- Then briefly explain and reference the relevant [Source N] entries.
+- If information is missing from the context, state that clearly.${allowGeneral ? " If useful, add a 'General knowledge' section with brief background." : ""}`
 
     const response = await this.openaiClient.createChatCompletion([
       { role: "system", content: systemPrompt },
@@ -137,6 +170,20 @@ Please provide a comprehensive answer based on the context above.`
     ])
 
     return response
+  }
+
+  // Local cosine similarity (duplicate of vector-store for ranking)
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0
+    let dot = 0
+    let na = 0
+    let nb = 0
+    for (let i = 0; i < a.length; i++) {
+      dot += a[i] * b[i]
+      na += a[i] * a[i]
+      nb += b[i] * b[i]
+    }
+    return dot / ((Math.sqrt(na) || 1) * (Math.sqrt(nb) || 1))
   }
 
   // Helper method to get vector store statistics

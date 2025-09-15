@@ -22,18 +22,20 @@ export class DocumentProcessor {
       const end = Math.min(start + chunkSize, text.length)
       const chunk = text.slice(start, end)
 
-      // Try to break at sentence boundaries
+      // Prefer to break at sentence/newline/space boundaries near the end of the chunk
       if (end < text.length) {
         const lastSentence = chunk.lastIndexOf(".")
         const lastNewline = chunk.lastIndexOf("\n")
-        const breakPoint = Math.max(lastSentence, lastNewline)
+        const lastSpace = chunk.lastIndexOf(" ")
+        const breakPointRel = Math.max(lastSentence, lastNewline, lastSpace)
 
-        if (breakPoint > start + chunkSize * 0.5) {
-          chunks.push(text.slice(start, breakPoint + 1).trim())
-          start = breakPoint + 1 - overlap
+        if (breakPointRel > chunk.length * 0.5) {
+          const sliceEnd = start + breakPointRel + 1 // convert to absolute index
+          chunks.push(text.slice(start, sliceEnd).trim())
+          start = Math.max(0, sliceEnd - overlap)
         } else {
           chunks.push(chunk.trim())
-          start = end - overlap
+          start = Math.max(0, end - overlap)
         }
       } else {
         chunks.push(chunk.trim())

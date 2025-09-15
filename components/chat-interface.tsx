@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
+// Removed ScrollArea in favor of a simple overflow container for more predictable scrolling
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Send, Bot, User, ExternalLink, Clock, Database } from "lucide-react"
@@ -35,7 +35,12 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [namespace, setNamespace] = useState("")
+
+  // Auto-scroll to the latest message
+  const endRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, isLoading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +63,7 @@ export function ChatInterface() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: input.trim(), namespace: namespace.trim() || undefined }),
+        body: JSON.stringify({ message: input.trim() }),
       })
 
       if (!response.ok) {
@@ -96,26 +101,16 @@ export function ChatInterface() {
   }
 
   return (
-    <Card className="w-full h-[700px] flex flex-col">
+    <Card className="w-full h-[75vh] md:h-[700px] flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="w-5 h-5" />
           Knowledge Base Assistant
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4">
-        {/* Optional namespace selector */}
-        <div className="flex items-center gap-2">
-          <Input
-            value={namespace}
-            onChange={(e) => setNamespace(e.target.value)}
-            placeholder="Namespace (optional)"
-            disabled={isLoading}
-            className="max-w-xs"
-          />
-        </div>
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6">
+      <CardContent className="flex-1 min-h-0 flex flex-col gap-4">
+        <div className="flex-1 pr-4 overflow-y-auto">
+          <div className="space-y-6 pb-24">
             {messages.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -147,11 +142,11 @@ export function ChatInterface() {
                       )}
                     </div>
                     <div
-                      className={`rounded-lg px-4 py-3 ${
+                      className={`rounded-lg px-4 py-3 overflow-x-hidden ${
                         message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                      <p className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</p>
                       <div className="flex items-center gap-2 mt-2 text-xs opacity-70">
                         <Clock className="w-3 h-3" />
                         <span>{message.timestamp.toLocaleTimeString()}</span>
@@ -225,10 +220,12 @@ export function ChatInterface() {
                 </div>
               </div>
             )}
+            {/* Auto-scroll sentinel */}
+            <div id="chat-bottom-sentinel" ref={endRef} />
           </div>
-        </ScrollArea>
+        </div>
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="sticky bottom-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 pt-2 flex gap-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -236,7 +233,7 @@ export function ChatInterface() {
             disabled={isLoading}
             className="flex-1"
           />
-          <Button type="submit" disabled={isLoading || !input.trim()}>
+          <Button type="submit" disabled={isLoading} title={!input.trim() ? "Type a message to send" : ""}>
             <Send className="w-4 h-4" />
           </Button>
         </form>

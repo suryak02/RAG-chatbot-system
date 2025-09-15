@@ -24,13 +24,16 @@ export default function AdminPage() {
   const [stats, setStats] = useState<IngestionStats | null>(null)
   const [vectorStoreInfo, setVectorStoreInfo] = useState<{ count: number } | null>(null)
   const [source, setSource] = useState<"openai-sample" | "openai-live" | "universal">("openai-sample")
-  const [namespace, setNamespace] = useState("")
   const [clearOnIngest, setClearOnIngest] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [justRefreshed, setJustRefreshed] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [clearNamespaceOnUpload, setClearNamespaceOnUpload] = useState(false)
+  const [manualTitle, setManualTitle] = useState("")
+  const [manualText, setManualText] = useState("")
+  const [isEmbeddingText, setIsEmbeddingText] = useState(false)
+  const [clearOnTextUpload, setClearOnTextUpload] = useState(false)
   const [uploadResult, setUploadResult] = useState<
     | null
     | {
@@ -39,6 +42,7 @@ export default function AdminPage() {
         successfulChunks: number
         failedChunks: number
         errors: string[]
+        extractionPreviews?: Array<{ file: string; preview: string }>
       }
   >(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -55,7 +59,6 @@ export default function AdminPage() {
         },
         body: JSON.stringify({
           source,
-          namespace: namespace.trim() || undefined,
           clear: clearOnIngest,
         }),
       })
@@ -77,9 +80,7 @@ export default function AdminPage() {
 
   const loadVectorStoreInfo = async () => {
     try {
-      const ns = namespace.trim()
-      const url = ns ? `/api/admin/vector-store?namespace=${encodeURIComponent(ns)}` : "/api/admin/vector-store"
-      const response = await fetch(url)
+      const response = await fetch("/api/admin/vector-store")
       if (response.ok) {
         const info = await response.json()
         setVectorStoreInfo(info)
@@ -105,11 +106,6 @@ export default function AdminPage() {
         setUploadError("Please choose one or more files to upload.")
         return
       }
-      const ns = namespace.trim()
-      if (!ns) {
-        setUploadError("Namespace is required for uploads to keep data isolated.")
-        return
-      }
 
       // Client-side limits (confirmed): 50MB per file, 100MB per batch
       const BYTES_PER_MB = 1024 * 1024
@@ -129,7 +125,6 @@ export default function AdminPage() {
       }
 
       const formData = new FormData()
-      formData.append("namespace", ns)
       formData.append("clearNamespace", String(!!clearNamespaceOnUpload))
       for (const f of Array.from(uploadFiles)) {
         formData.append("files", f)
@@ -152,12 +147,57 @@ export default function AdminPage() {
         successfulChunks: result.successfulChunks,
         failedChunks: result.failedChunks,
         errors: result.errors || [],
+        extractionPreviews: result.extractionPreviews || [],
       })
       await loadVectorStoreInfo()
     } catch (err) {
       setUploadError(String(err))
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  const handleEmbedText = async () => {
+    try {
+      setUploadError(null)
+      setUploadResult(null)
+      const text = manualText.trim()
+      if (text.length < 5) {
+        setUploadError("Please enter some text to embed (at least a few characters).")
+        return
+      }
+
+      const filename = `${(manualTitle || "manual").replace(/[^a-z0-9-_]/gi, "-")}-${Date.now()}.txt`
+      const blob = new Blob([text], { type: "text/plain" })
+
+      const formData = new FormData()
+      formData.append("clearNamespace", String(!!clearOnTextUpload))
+      formData.append("files", blob, filename)
+
+      setIsEmbeddingText(true)
+      const response = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Embed text failed: ${response.statusText}`)
+      }
+
+      setUploadResult({
+        filesProcessed: result.filesProcessed,
+        totalChunks: result.totalChunks,
+        successfulChunks: result.successfulChunks,
+        failedChunks: result.failedChunks,
+        errors: result.errors || [],
+        extractionPreviews: result.extractionPreviews || [],
+      })
+      await loadVectorStoreInfo()
+    } catch (err) {
+      setUploadError(String(err))
+    } finally {
+      setIsEmbeddingText(false)
     }
   }
 
@@ -213,6 +253,124 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
+        {/* Quick Add Text (bypasses PDF/DOCX parsing) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Download className="w-5 h-5" />
+              Quick Add Text (Paste content and embed)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Paste or type content directly. This bypasses PDF/DOCX parsing and helps verify end-to-end embedding.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Optional Title</label>
+                <input
+                  type="text"
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  placeholder="E.g. AI Agent Guide"
+                  className="w-full border rounded-md px-3 py-2 bg-background"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={clearOnTextUpload}
+                    onChange={(e) => setClearOnTextUpload(e.target.checked)}
+                  />
+                  Clear existing knowledge base before embedding
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Text</label>
+              <textarea
+                value={manualText}
+                onChange={(e) => setManualText(e.target.value)}
+                rows={8}
+                placeholder="Paste your content here..."
+                className="w-full border rounded-md px-3 py-2 bg-background font-mono text-sm"
+              />
+            </div>
+
+            <Button onClick={handleEmbedText} disabled={isEmbeddingText || manualText.trim().length === 0} className="w-full">
+              {isEmbeddingText ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Embedding Text...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Embed Text
+                </>
+              )}
+            </Button>
+
+            {uploadError && (
+              <Alert variant="destructive">
+                <AlertDescription className="text-sm">{uploadError}</AlertDescription>
+              </Alert>
+            )}
+
+            {uploadResult && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold">{uploadResult.filesProcessed}</p>
+                  <p className="text-sm text-muted-foreground">Files Processed</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold">{uploadResult.totalChunks}</p>
+                  <p className="text-sm text-muted-foreground">Total Chunks</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{uploadResult.successfulChunks}</p>
+                  <p className="text-sm text-muted-foreground">Successful</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">{uploadResult.failedChunks}</p>
+                  <p className="text-sm text-muted-foreground">Failed</p>
+                </div>
+              </div>
+            )}
+
+            {uploadResult?.extractionPreviews && uploadResult.extractionPreviews.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-semibold">Extraction preview</h4>
+                <div className="max-h-48 overflow-y-auto space-y-2">
+                  {uploadResult.extractionPreviews.map((p, idx) => (
+                    <div key={idx} className="border rounded-md p-2 bg-muted/50">
+                      <div className="text-xs font-medium mb-1">{p.file}</div>
+                      <pre className="text-xs whitespace-pre-wrap font-mono">{p.preview}</pre>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {uploadResult?.errors && uploadResult.errors.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-semibold">Warnings/Errors ({uploadResult.errors.length})</h4>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {uploadResult.errors.map((err, idx) => (
+                    <Alert key={idx} variant="destructive">
+                      <AlertDescription className="text-xs">{err}</AlertDescription>
+                    </Alert>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Upload Knowledge Base */}
         <Card>
           <CardHeader>
@@ -227,25 +385,14 @@ export default function AdminPage() {
               Accepted types: .pdf, .docx, .md, .txt. Limits: 50MB per file, 100MB per upload.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1 md:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
                 <label className="text-sm font-medium">Files</label>
                 <input
                   type="file"
                   multiple
                   accept=".pdf,.docx,.md,.txt"
                   onChange={(e) => setUploadFiles(e.target.files)}
-                  className="w-full border rounded-md px-3 py-2 bg-background"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Namespace (required)</label>
-                <input
-                  type="text"
-                  value={namespace}
-                  onChange={(e) => setNamespace(e.target.value)}
-                  placeholder="e.g., client-acme"
                   className="w-full border rounded-md px-3 py-2 bg-background"
                 />
               </div>
@@ -257,12 +404,12 @@ export default function AdminPage() {
                     checked={clearNamespaceOnUpload}
                     onChange={(e) => setClearNamespaceOnUpload(e.target.checked)}
                   />
-                  Clear this namespace before upload
+                  Clear existing knowledge base before upload
                 </label>
               </div>
             </div>
 
-            <Button onClick={handleUpload} disabled={isUploading || !uploadFiles || !namespace.trim()} className="w-full">
+            <Button onClick={handleUpload} disabled={isUploading || !uploadFiles} className="w-full">
               {isUploading ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -309,6 +456,19 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {uploadResult?.errors && uploadResult.errors.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-semibold">Upload Warnings/Errors ({uploadResult.errors.length})</h4>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {uploadResult.errors.map((err, idx) => (
+                    <Alert key={idx} variant="destructive">
+                      <AlertDescription className="text-xs">{err}</AlertDescription>
+                    </Alert>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -321,9 +481,7 @@ export default function AdminPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Ingest selected documentation into the vector store for RAG queries. This can rebuild the knowledge base.
-            </p>
+            <p className="text-sm text-muted-foreground">Ingest sample/live docs into the vector store (optional).</p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
@@ -339,17 +497,6 @@ export default function AdminPage() {
                 </select>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Namespace (optional)</label>
-                <input
-                  type="text"
-                  value={namespace}
-                  onChange={(e) => setNamespace(e.target.value)}
-                  placeholder="e.g., client-acme"
-                  className="w-full border rounded-md px-3 py-2 bg-background"
-                />
-              </div>
-
               <div className="flex items-end">
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -357,7 +504,7 @@ export default function AdminPage() {
                     checked={clearOnIngest}
                     onChange={(e) => setClearOnIngest(e.target.checked)}
                   />
-                  Clear existing data
+                  Clear existing knowledge base
                 </label>
               </div>
             </div>
