@@ -12,13 +12,167 @@ const DEFAULT_MAX_FILE_MB = Number(process.env.UPLOAD_MAX_FILE_MB || 50)
 const DEFAULT_MAX_BATCH_MB = Number(process.env.UPLOAD_MAX_BATCH_MB || 100)
 const MIN_TEXT_CHARS = Number(process.env.OCR_TEXT_MIN_CHARS || 200)
 const USE_LOCAL_OCR = process.env.USE_LOCAL_OCR_FALLBACK === "true"
+const OCR_PROVIDER = (process.env.OCR_PROVIDER || "local").toLowerCase()
+const AZURE_VISION_ENDPOINT = (process.env.AZURE_VISION_ENDPOINT || "").replace(/\/$/, "")
+const AZURE_VISION_KEY = process.env.AZURE_VISION_KEY || ""
+const AZURE_READ_POLL_MS = Number(process.env.AZURE_READ_POLL_MS || 1000)
+const AZURE_READ_MAX_POLLS = Number(process.env.AZURE_READ_MAX_POLLS || 60)
+const PDF_MAX_TEXT_PAGES = Number(process.env.PDF_MAX_TEXT_PAGES || 50)
+const PDF_FORCE_AZURE_OCR = process.env.PDF_FORCE_AZURE_OCR === "true"
+const AZURE_OCR_MAX_PAGES = Number(process.env.AZURE_OCR_MAX_PAGES || process.env.OCR_MAX_PAGES || 10)
 
 function getExt(filename: string): string {
   const idx = filename.lastIndexOf(".")
   return idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ""
 }
 
+async function azureOcrPdfPages(buffer: Buffer): Promise<string> {
+  if (OCR_PROVIDER !== "azure" || !AZURE_VISION_ENDPOINT || !AZURE_VISION_KEY) return ""
+  try {
+    const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.js")
+    const { createCanvas }: any = await import("canvas")
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) })
+    const pdf = await loadingTask.promise
+    const pages = Math.min(pdf.numPages, AZURE_OCR_MAX_PAGES)
+    const pieces: string[] = []
+    for (let i = 1; i <= pages; i++) {
+      try {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale: 2.0 })
+        const canvas = createCanvas(viewport.width, viewport.height)
+        const ctx = canvas.getContext("2d")
+        const renderTask = page.render({ canvasContext: ctx, viewport })
+        await renderTask.promise
+        const pngBuffer: Buffer = canvas.toBuffer("image/png")
+        const text = await azureReadAnalyze(pngBuffer, "image/png")
+        if (text && text.trim().length > 0) pieces.push(text)
+      } catch (e) {
+        console.warn("Azure per-page OCR failed for PDF page", i, e)
+      }
+    }
+    return pieces.join("\n\n").trim()
+  } catch (e) {
+    console.warn("Failed Azure per-page OCR for PDF:", e)
+    return ""
+  }
+}
+
+async function extractPdfTextWithPdfjs(buffer: Buffer): Promise<string> {
+  try {
+    const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.js")
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) })
+    const pdf = await loadingTask.promise
+    const pages = Math.min(pdf.numPages, PDF_MAX_TEXT_PAGES)
+    const out: string[] = []
+    for (let i = 1; i <= pages; i++) {
+      const page = await pdf.getPage(i)
+      const textContent = await page.getTextContent()
+      let lastY: number | undefined
+      let line = ""
+      for (const item of textContent.items || []) {
+        const text = typeof item.str === "string" ? item.str : ""
+        if (!text) continue
+        const y = Array.isArray(item.transform) ? item.transform[5] : undefined
+        if (lastY === undefined) {
+          line = text
+        } else if (typeof y === "number" && typeof lastY === "number" && Math.abs(y - lastY) < 0.5) {
+          line = `${line} ${text}`.trim()
+        } else {
+          out.push(line)
+          line = text
+        }
+        lastY = y
+      }
+      if (line) out.push(line)
+      out.push("")
+    }
+    return normalizeExtractedText(out.join("\n"))
+  } catch (e) {
+    console.warn("PDF.js text extraction failed:", e)
+    return ""
+  }
+}
+
+async function azureReadAnalyze(buffer: Buffer, contentType: string): Promise<string> {
+  if (OCR_PROVIDER !== "azure" || !AZURE_VISION_ENDPOINT || !AZURE_VISION_KEY) return ""
+  try {
+    const url = `${AZURE_VISION_ENDPOINT}/vision/v3.2/read/analyze`
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY,
+        // Use caller-provided type (e.g., application/pdf or image/png)
+        "Content-Type": contentType || "application/octet-stream",
+      },
+      body: buffer,
+    })
+    // Azure may return 202 Accepted
+    if (!(res.ok || res.status === 202)) {
+      try {
+        console.warn("Azure Read analyze POST failed:", res.status, await res.text())
+      } catch {}
+      return ""
+    }
+    const opLoc = res.headers.get("operation-location")
+    if (!opLoc) return ""
+    // Poll for result
+    for (let i = 0; i < AZURE_READ_MAX_POLLS; i++) {
+      await new Promise((r) => setTimeout(r, AZURE_READ_POLL_MS))
+      const r2 = await fetch(opLoc, {
+        headers: { "Ocp-Apim-Subscription-Key": AZURE_VISION_KEY },
+      })
+      if (!r2.ok) continue
+      const data: any = await r2.json()
+      const status = String(data?.status || "").toLowerCase()
+      if (status === "succeeded") {
+        const ar = data?.analyzeResult
+        const parts: string[] = []
+        if (ar) {
+          if (Array.isArray(ar.readResults)) {
+            for (const page of ar.readResults) {
+              for (const line of page.lines || []) {
+                if (line.text) parts.push(String(line.text))
+              }
+              parts.push("\n")
+            }
+          } else if (Array.isArray(ar.pages)) {
+            for (const page of ar.pages) {
+              for (const line of page.lines || []) {
+                const txt = line.content || line.text
+                if (txt) parts.push(String(txt))
+              }
+              parts.push("\n")
+            }
+          } else if (typeof ar.content === "string") {
+            parts.push(ar.content)
+          }
+        }
+        return normalizeExtractedText(parts.join("\n"))
+      }
+      if (status === "failed") {
+        try {
+          console.warn("Azure Read analyze failed:", JSON.stringify(data))
+        } catch {}
+        return ""
+      }
+    }
+    console.warn("Azure Read analyze timed out.")
+    return ""
+  } catch (e) {
+    console.warn("Azure Read analyze error:", e)
+    return ""
+  }
+}
+
 async function ocrPdf(buffer: Buffer): Promise<string> {
+  // Prefer Azure OCR if configured
+  if (OCR_PROVIDER === "azure" && AZURE_VISION_ENDPOINT && AZURE_VISION_KEY) {
+    const t = await azureReadAnalyze(buffer, "application/pdf")
+    if (t && t.trim().length > 0) return t
+    // Per-page Azure fallback: render to images and OCR each page
+    const perPage = await azureOcrPdfPages(buffer)
+    if (perPage && perPage.trim().length > 0) return perPage
+  }
   if (!USE_LOCAL_OCR) return ""
   try {
     const pdfjsLib: any = await import("pdfjs-dist/legacy/build/pdf.js")
@@ -76,6 +230,29 @@ async function ocrImageBuffer(buf: Buffer, lang = "eng"): Promise<string> {
 }
 
 async function ocrDocxImages(buffer: Buffer): Promise<string> {
+  // Prefer Azure OCR per image if configured
+  if (OCR_PROVIDER === "azure" && AZURE_VISION_ENDPOINT && AZURE_VISION_KEY) {
+    try {
+      const JSZip: any = (await import("jszip")).default
+      const zip = await JSZip.loadAsync(buffer)
+      const imagePaths = Object.keys(zip.files).filter((p) =>
+        /^word\/media\//.test(p) && /\.(png|jpe?g|gif|bmp|webp)$/i.test(p),
+      )
+      const pieces: string[] = []
+      for (const p of imagePaths) {
+        try {
+          const imgBuf: Buffer = await zip.file(p).async("nodebuffer")
+          const t = await azureReadAnalyze(imgBuf, "image/png")
+          if (t && t.trim().length > 0) pieces.push(t)
+        } catch (e) {
+          console.warn("Azure OCR failed for DOCX image:", p, e)
+        }
+      }
+      if (pieces.length > 0) return pieces.join("\n\n").trim()
+    } catch (e) {
+      console.warn("Failed to Azure-OCR DOCX images:", e)
+    }
+  }
   if (!USE_LOCAL_OCR) return ""
   try {
     const JSZip: any = (await import("jszip")).default
@@ -201,17 +378,29 @@ function htmlToText(html: string): string {
   return work.trim()
 }
 
-async function parseFileToText(file: File): Promise<string> {
+async function parseFileToText(file: File): Promise<{ text: string; debug?: string }> {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   const ext = getExt(file.name)
 
   if (ext === "pdf") {
+    const dbg: string[] = []
+    // Optional: force Azure first
+    if (OCR_PROVIDER === "azure" && AZURE_VISION_ENDPOINT && AZURE_VISION_KEY && PDF_FORCE_AZURE_OCR) {
+      const forced = await azureReadAnalyze(buffer, "application/pdf")
+      dbg.push(`azure_forced_len=${forced?.length || 0}`)
+      if (forced && forced.trim().length >= 20) return { text: forced, debug: dbg.join("; ") }
+      console.warn("PDF_FORCE_AZURE_OCR was set but Azure returned empty; continuing with parser fallbacks.")
+    }
+
+    let textDefault = ""
+    let textCustom = ""
     try {
       const pdfParse = (await import("pdf-parse")).default as any
       // Candidate 1: default extraction
       const dataDefault = await pdfParse(buffer)
-      const textDefault = normalizeExtractedText(String(dataDefault.text || ""))
+      textDefault = normalizeExtractedText(String(dataDefault.text || ""))
+      dbg.push(`pdfparse_default_len=${textDefault.length}`)
 
       // Candidate 2: custom pagerender that concatenates items into lines
       const options = {
@@ -236,21 +425,39 @@ async function parseFileToText(file: File): Promise<string> {
           }),
       }
       const dataCustom = await pdfParse(buffer, options)
-      const textCustom = normalizeExtractedText(String(dataCustom.text || ""))
-
-      const best = scoreTextQuality(textCustom) > scoreTextQuality(textDefault) ? textCustom : textDefault
-      if (best.trim().length < MIN_TEXT_CHARS) {
-        console.warn(
-          `PDF parsed but text length is small (${best.length}). Attempting local OCR fallback (if enabled).`,
-        )
-        const ocrText = await ocrPdf(buffer)
-        if (ocrText && ocrText.length > 0) return ocrText
-      }
-      return best
+      textCustom = normalizeExtractedText(String(dataCustom.text || ""))
+      dbg.push(`pdfparse_custom_len=${textCustom.length}`)
     } catch (e) {
-      console.error("Failed to parse PDF with pdf-parse:", e)
-      return ""
+      console.error("pdf-parse failed, continuing with PDF.js/Azure/local OCR:", e)
+      dbg.push(`pdfparse_exception=${(e as Error)?.message || String(e)}`)
     }
+
+    const best = scoreTextQuality(textCustom) > scoreTextQuality(textDefault) ? textCustom : textDefault
+    if (best.trim().length >= MIN_TEXT_CHARS) return { text: best, debug: dbg.join("; ") }
+
+    // Try direct PDF.js text extraction before OCR
+    const pdfjsText = await extractPdfTextWithPdfjs(buffer)
+    dbg.push(`pdfjs_len=${pdfjsText?.length || 0}`)
+    if (pdfjsText && pdfjsText.trim().length >= MIN_TEXT_CHARS) return { text: pdfjsText, debug: dbg.join("; ") }
+
+    // Try Azure OCR (if configured) as a robust fallback
+    if (OCR_PROVIDER === "azure" && AZURE_VISION_ENDPOINT && AZURE_VISION_KEY) {
+      const t = await azureReadAnalyze(buffer, "application/pdf")
+      dbg.push(`azure_fallback_len=${t?.length || 0}`)
+      if (t && t.trim().length >= 20) return { text: t, debug: dbg.join("; ") }
+      const perPage = await azureOcrPdfPages(buffer)
+      dbg.push(`azure_perpage_len=${perPage?.length || 0}`)
+      if (perPage && perPage.trim().length >= 20) return { text: perPage, debug: dbg.join("; ") }
+    }
+
+    // Finally local OCR (if enabled)
+    const ocrText = await ocrPdf(buffer)
+    dbg.push(`local_ocr_len=${ocrText?.length || 0}`)
+    if (ocrText && ocrText.length > 0) return { text: ocrText, debug: dbg.join("; ") }
+
+    // Nothing worked
+    dbg.push(`best_len=${best.length}`)
+    return { text: best, debug: dbg.join("; ") }
   }
 
   if (ext === "docx") {
@@ -258,14 +465,17 @@ async function parseFileToText(file: File): Promise<string> {
     // First try raw text
     const raw = await mammoth.extractRawText({ buffer })
     const rawText = normalizeExtractedText(String(raw.value || ""))
-    if (rawText.length >= MIN_TEXT_CHARS) return rawText
+    const dbg: string[] = []
+    dbg.push(`docx_raw_len=${rawText.length}`)
+    if (rawText.length >= MIN_TEXT_CHARS) return { text: rawText, debug: dbg.join("; ") }
 
     // Fallback: HTML -> text
     try {
       const htmlRes = await mammoth.convertToHtml({ buffer })
       const html = String(htmlRes.value || "")
       const textFromHtml = normalizeExtractedText(htmlToText(html))
-      if (textFromHtml.length >= MIN_TEXT_CHARS) return textFromHtml
+      dbg.push(`docx_html_len=${textFromHtml.length}`)
+      if (textFromHtml.length >= MIN_TEXT_CHARS) return { text: textFromHtml, debug: dbg.join("; ") }
     } catch (e) {
       console.warn("DOCX HTML fallback failed:", e)
       // continue to OCR fallback below
@@ -273,12 +483,14 @@ async function parseFileToText(file: File): Promise<string> {
 
     // Final fallback: OCR embedded images (English only for now)
     const ocrText = await ocrDocxImages(buffer)
-    if (ocrText && ocrText.length > 0) return ocrText
-    return rawText // whatever we had
+    dbg.push(`docx_ocr_len=${ocrText?.length || 0}`)
+    if (ocrText && ocrText.length > 0) return { text: ocrText, debug: dbg.join("; ") }
+    return { text: rawText, debug: dbg.join("; ") } // whatever we had
   }
 
   if (ext === "md" || ext === "txt") {
-    return normalizeExtractedText(buffer.toString("utf8"))
+    const txt = normalizeExtractedText(buffer.toString("utf8"))
+    return { text: txt, debug: `plain_len=${txt.length}` }
   }
 
   throw new Error(`Unsupported file type: .${ext}`)
@@ -335,7 +547,7 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       try {
-        const text = await parseFileToText(file)
+        const { text, debug } = await parseFileToText(file)
         const title = getBase(file.name)
         const url = `local://upload/${encodeURIComponent(file.name)}`
 
@@ -349,7 +561,7 @@ export async function POST(request: NextRequest) {
         // If no meaningful text was extracted, report and skip embedding
         if (!text || text.trim().length < 20) {
           errors.push(
-            `No extractable text found in ${file.name}. If this is a scanned/secured PDF, try converting to .docx or .txt and re-upload.`,
+            `No extractable text found in ${file.name}. If this is a scanned/secured PDF, try converting to .docx or .txt and re-upload. Debug: ${debug || "n/a"}`,
           )
           filesProcessed++
           continue
