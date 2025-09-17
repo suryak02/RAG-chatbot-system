@@ -98,4 +98,4 @@ Then trigger a deploy. Post‑deploy smoke test:
 
 - `.env*` files are ignored by Git (see `.gitignore`). Keep your keys only in `.env.local` or in Netlify env vars.
 - No `NEXT_PUBLIC_*` env vars are used; secrets are server‑side.
-- For a lean repo: we removed the old UI panel for "Documentation Ingestion". You may also delete the server files under `app/api/admin/ingest/` and `lib/ingestion-pipeline.ts`/`lib/documentation-fetcher.ts` if you don’t plan to use them.
+- Old documentation ingestion code has been removed. The project relies solely on file uploads via `/api/admin/upload`.

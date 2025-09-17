@@ -72,5 +72,5 @@ This repo includes `netlify.toml` (Node 20). After connecting your repo, set the
 
 ## Notes
 
-- The older "Documentation Ingestion" panel and API have been removed from the UI to keep the demo focused on uploads. The endpoint under `app/api/admin/ingest/` can be deleted if not needed.
+- The older "Documentation Ingestion" panel and API have been removed to keep the demo focused on uploads. The legacy endpoint under `app/api/admin/ingest/` has been removed.
 - The vector store is in‑memory for demos. For production, plug in a managed vector DB and add auth + storage.

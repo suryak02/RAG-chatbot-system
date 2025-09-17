@@ -19,8 +19,6 @@ Speaker notes:
 
 ## 2) Our Solution — RAG Chatbot with Robust Ingestion
 
-![Architecture](/architecture-rag.svg)
-
 - Admin UI: upload PDFs/DOCX/MD/TXT with extraction preview.
 - Robust text extraction pipeline: pdf‑parse → PDF.js → Azure Read OCR (per‑page fallback).
 - Chunking + embeddings → in‑memory vector store (fast demo path).
