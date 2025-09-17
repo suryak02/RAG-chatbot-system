@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <style>
+      .title { font: 700 28px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; fill: #0f172a; }
+      .label { font: 600 16px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; fill: #0f172a; }
+      .small { font: 500 13px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; fill: #334155; }
+      .box { rx: 14; ry: 14; fill: #ffffff; stroke: #e2e8f0; stroke-width: 2; }
+      .accent { fill: url(#bg); }
+      .arrow { stroke: #334155; stroke-width: 2.5; marker-end: url(#arrowHead); fill: none; }
+    </style>
+    <marker id="arrowHead" orient="auto" markerWidth="8" markerHeight="8" refX="5" refY="4">
+      <path d="M0,0 L8,4 L0,8 z" fill="#334155"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="720" fill="#f8fafc"/>
+  <text x="600" y="48" text-anchor="middle" class="title">RAG Chatbot System — High-Level Architecture</text>
+
+  <!-- Left: Admin Ingestion -->
+  <rect class="box" x="40" y="100" width="360" height="250"/>
+  <text x="60" y="130" class="label">Admin UI (Next.js)</text>
+  <text x="60" y="156" class="small">• Upload: PDF / DOCX / MD / TXT</text>
+  <text x="60" y="178" class="small">• Extraction preview</text>
+  <text x="60" y="200" class="small">• Clear namespace (multi-tenant)</text>
+
+  <rect class="box" x="40" y="210" width="360" height="120"/>
+  <text x="60" y="238" class="label">/api/admin/upload (Node runtime)</text>
+  <text x="60" y="262" class="small">Parse → Normalize → Chunk → Embed</text>
+  <text x="60" y="284" class="small">OCR fallback: pdf-parse → PDF.js → Azure Read</text>
+
+  <!-- Center: Vector store & OpenAI -->
+  <rect class="box" x="435" y="170" width="330" height="140"/>
+  <text x="450" y="195" class="label">In-memory Vector Store</text>
+  <text x="450" y="220" class="small">• Add/clear by namespace</text>
+  <text x="450" y="242" class="small">• Cosine similarity search</text>
+  <text x="450" y="264" class="small">• No external DB (yet)</text>
+
+  <rect class="box" x="800" y="170" width="360" height="140"/>
+  <text x="820" y="195" class="label">OpenAI Embeddings + Chat</text>
+  <text x="820" y="220" class="small">• Real key or mock fallback</text>
+  <text x="820" y="242" class="small">• Prompt includes retrieved chunks</text>
+
+  <!-- OCR provider -->
+  <rect class="box" x="40" y="380" width="360" height="140"/>
+  <text x="60" y="405" class="label">Azure AI Vision (Read OCR)</text>
+  <text x="60" y="430" class="small">• Fast OCR for scanned/image PDFs</text>
+  <text x="60" y="452" class="small">• Config via OCR_PROVIDER=azure</text>
+
+  <!-- Right: Chat UI path -->
+  <rect class="box" x="800" y="380" width="360" height="160"/>
+  <text x="820" y="405" class="label">Chat UI (Next.js)</text>
+  <text x="820" y="430" class="small">• Optional namespace</text>
+  <text x="820" y="452" class="small">• Shows sources for answers</text>
+
+  <rect class="box" x="435" y="400" width="330" height="120"/>
+  <text x="450" y="425" class="label">/api/chat</text>
+  <text x="450" y="450" class="small">Embed query → similarity search →
+  compose response with citations</text>
+
+  <!-- Arrows ingestion -->
+  <path class="arrow" d="M400,270 L435,240"/>
+  <path class="arrow" d="M765,240 L800,240"/>
+  <path class="arrow" d="M400,270 L400,450 L435,460"/>
+  <path class="arrow" d="M400,450 L400,450"/>
+
+  <!-- Arrows chat -->
+  <path class="arrow" d="M800,440 L765,460"/>
+  <path class="arrow" d="M600,460 L800,460"/>
+
+  <!-- Legend -->
+  <rect class="box" x="40" y="560" width="1120" height="120"/>
+  <text x="60" y="590" class="label">Key Design</text>
+  <text x="60" y="615" class="small">• Robust extraction for PDFs/DOCX with Azure OCR fallback • Simple in-memory vector store for fast demos • Admin UI for uploads + preview • Chat UI with sources and namespaces • Deployable on Netlify (Node 20)</text>
+</svg>

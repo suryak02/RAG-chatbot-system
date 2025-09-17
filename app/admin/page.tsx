@@ -172,7 +172,7 @@ export default function AdminPage() {
             <Database className="w-8 h-8" />
             <div>
               <h1 className="text-3xl font-bold">RAG System Administration</h1>
-              <p className="text-muted-foreground">Manage documentation ingestion and the vector store</p>
+              <p className="text-muted-foreground">Manage uploads and the vector store</p>
             </div>
           </div>
           <Button asChild variant="outline">
