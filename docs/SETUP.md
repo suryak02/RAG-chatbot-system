@@ -4,7 +4,7 @@ This guide shows how to run the RAG Chatbot locally and (optionally) deploy to N
 
 - Runs on Node.js 20+
 - Requires an OpenAI API key
-- Uses Azure AI Vision Read (OCR) for fast/accurate PDF text extraction
+- Uses Azure AI Services (Vision Read OCR capability) for fast/accurate PDF text extraction
 
 ---
 
@@ -40,9 +40,9 @@ npm install --legacy-peer-deps
 
 ---
 
-## 3) Create the Azure AI Vision resource
+## 3) Create the Azure AI Services resource
 
-1. In the Azure Portal, search for "Azure AI Services" or "Azure AI Vision" and create a resource (S0 works for testing).
+1. In the Azure Portal, search for "Azure AI Services" (multi‑service) and create a resource (S0 works for testing). We use the Vision Read OCR capability from this multi‑service resource.
 2. After creation, go to "Keys and Endpoint" and copy:
    - Endpoint (e.g., `https://<resource>.cognitiveservices.azure.com`)
    - Key (e.g., a long alphanumeric string)

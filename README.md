@@ -17,7 +17,7 @@ Key features:
 
 - Node.js 20+
 - An OpenAI API key
-- An Azure AI Vision (Read OCR) endpoint + key
+- An Azure AI Services (Vision Read OCR capability) endpoint + key
 
 2) Configure environment
 
@@ -48,7 +48,7 @@ NEXT_TELEMETRY_DISABLED=1 npm run dev -- -p 3000
 See `docs/SETUP.md` for step‑by‑step instructions to:
 
 - Create an OpenAI API key
-- Create Azure AI Vision (or Azure AI Services) resource and get endpoint + key
+- Create an Azure AI Services (multi‑service) resource and get endpoint + key
 - Configure `.env.local`
 - Troubleshoot OCR and PDF parsing
 
