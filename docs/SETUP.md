@@ -5,6 +5,7 @@ This guide shows how to run the RAG Chatbot locally and (optionally) deploy to N
 - Runs on Node.js 20+
 - Requires an OpenAI API key
 - Uses Azure AI Services (Vision Read OCR capability) for fast/accurate PDF text extraction
+- Optional: Azure Speech (short‑audio transcription) to ingest audio clips
 
 ---
 
@@ -30,6 +31,9 @@ npm install --legacy-peer-deps
    - `OCR_PROVIDER=azure` — use Azure OCR
    - `AZURE_VISION_ENDPOINT` — looks like `https://<resource>.cognitiveservices.azure.com`
    - `AZURE_VISION_KEY` — key from the Azure portal
+   - Optional audio (short clips ≤ ~60s recommended):
+     - `AZURE_SPEECH_REGION`
+     - `AZURE_SPEECH_KEY`
    - Optional tuning:
      - `AZURE_READ_POLL_MS` (default 1000)
      - `AZURE_READ_MAX_POLLS` (default 180)
@@ -59,7 +63,7 @@ NEXT_TELEMETRY_DISABLED=1 npm run dev -- -p 3000
 ```
 
 - Admin UI: http://localhost:3000/admin
-  - Upload PDFs/DOCX/MD/TXT
+  - Upload PDFs/DOCX/MD/TXT and audio files (WAV/MP3/OGG/WEBM/M4A)
   - See extraction preview before embedding
 - Chat UI: http://localhost:3000
   - Ask questions, see cited sources
@@ -71,6 +75,9 @@ Troubleshooting
 - If Azure OCR doesn’t respond:
   - Check `AZURE_VISION_ENDPOINT`/`AZURE_VISION_KEY`
   - Increase `AZURE_READ_MAX_POLLS`
+ - For audio transcription:
+   - Ensure `AZURE_SPEECH_REGION` and `AZURE_SPEECH_KEY` are set
+   - Use short clips (≤ ~60s recommended) for this REST endpoint
 
 ---
 

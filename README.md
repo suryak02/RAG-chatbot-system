@@ -10,6 +10,7 @@ Key features:
 - Admin UI: upload files, see extraction preview, and embed
 - Chat UI: retrieves relevant chunks and answers with sources
 - Simple in‑memory vector store (fast for demos), easy to swap later
+- Optional audio transcription for short clips via Azure Speech (WAV/MP3/OGG/WEBM/M4A)
 
 ## Quick Start
 
@@ -18,6 +19,7 @@ Key features:
 - Node.js 20+
 - An OpenAI API key
 - An Azure AI Services (Vision Read OCR capability) endpoint + key
+  - Optional (for audio): Azure Speech `region` and `key`
 
 2) Configure environment
 
@@ -28,6 +30,7 @@ Key features:
   - `AZURE_VISION_ENDPOINT` (e.g. `https://<resource>.cognitiveservices.azure.com`)
   - `AZURE_VISION_KEY`
   - Optional tuning: `AZURE_READ_POLL_MS`, `AZURE_READ_MAX_POLLS`, `PDF_FORCE_AZURE_OCR`
+  - Optional audio (short clips ≤ ~60s recommended): `AZURE_SPEECH_REGION`, `AZURE_SPEECH_KEY`
 
 3) Install and run
 
@@ -42,6 +45,7 @@ NEXT_TELEMETRY_DISABLED=1 npm run dev -- -p 3000
 - Upload one or more files (50MB/file, 100MB/batch)
 - Confirm the extraction preview looks right
 - Go to `http://localhost:3000` and ask questions; check cited sources
+  - Accepted types include `.pdf`, `.docx`, `.md`, `.txt`, and audio: `.wav`, `.mp3`, `.ogg`, `.webm`, `.m4a` (audio uses Azure Speech short‑audio API)
 
 ## Setup Details
 
@@ -64,6 +68,7 @@ This repo includes `netlify.toml` (Node 20). After connecting your repo, set the
 - `AZURE_READ_MAX_POLLS=180`
 - `PDF_FORCE_AZURE_OCR=true` (or `false` for parser‑first)
 - `NEXT_TELEMETRY_DISABLED=1`
+  - Optional audio: `AZURE_SPEECH_REGION`, `AZURE_SPEECH_KEY`
 
 ## Security
 

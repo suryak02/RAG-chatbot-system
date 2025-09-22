@@ -20,10 +20,63 @@ const AZURE_READ_MAX_POLLS = Number(process.env.AZURE_READ_MAX_POLLS || 60)
 const PDF_MAX_TEXT_PAGES = Number(process.env.PDF_MAX_TEXT_PAGES || 50)
 const PDF_FORCE_AZURE_OCR = process.env.PDF_FORCE_AZURE_OCR === "true"
 const AZURE_OCR_MAX_PAGES = Number(process.env.AZURE_OCR_MAX_PAGES || process.env.OCR_MAX_PAGES || 10)
+// Azure Speech (short audio) for audio transcription
+const AZURE_SPEECH_REGION = (process.env.AZURE_SPEECH_REGION || "").trim()
+const AZURE_SPEECH_KEY = (process.env.AZURE_SPEECH_KEY || "").trim()
 
 function getExt(filename: string): string {
   const idx = filename.lastIndexOf(".")
   return idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ""
+}
+
+// Azure Speech to Text (short audio REST). Suitable for short clips; for long audio, prefer batch services.
+async function azureSpeechRecognizeShortAudio(
+  buffer: Buffer,
+  contentType: string,
+  language = "en-US",
+): Promise<string> {
+  if (!AZURE_SPEECH_REGION || !AZURE_SPEECH_KEY) return ""
+  try {
+    const base = `https://${AZURE_SPEECH_REGION}.stt.speech.microsoft.com`
+    const url = `${base}/speech/recognition/conversation/cognitiveservices/v1?language=${encodeURIComponent(language)}`
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": AZURE_SPEECH_KEY,
+        "Content-Type": contentType || "audio/wav",
+      },
+      body: buffer,
+    })
+    if (!res.ok) {
+      try {
+        console.warn("Azure Speech short-audio failed:", res.status, await res.text())
+      } catch {}
+      return ""
+    }
+    const data: any = await res.json()
+    const text: string = data?.DisplayText || data?.Text || ""
+    return normalizeExtractedText(String(text || ""))
+  } catch (e) {
+    console.warn("Azure Speech short-audio error:", e)
+    return ""
+  }
+}
+
+function getAudioContentTypeByExt(ext: string): string | null {
+  switch (ext) {
+    case "wav":
+      return "audio/wav"
+    case "mp3":
+      return "audio/mpeg"
+    case "ogg":
+      return "audio/ogg"
+    case "webm":
+      return "audio/webm"
+    case "m4a":
+      return "audio/mp4" // some clients encode M4A as audio/mp4
+    default:
+      return null
+  }
 }
 
 async function azureOcrPdfPages(buffer: Buffer): Promise<string> {
@@ -491,6 +544,18 @@ async function parseFileToText(file: File): Promise<{ text: string; debug?: stri
   if (ext === "md" || ext === "txt") {
     const txt = normalizeExtractedText(buffer.toString("utf8"))
     return { text: txt, debug: `plain_len=${txt.length}` }
+  }
+
+  // Audio transcription via Azure Speech (short audio)
+  if (["wav", "mp3", "ogg", "webm", "m4a"].includes(ext)) {
+    const ct = getAudioContentTypeByExt(ext) || "audio/wav"
+    const transcript = await azureSpeechRecognizeShortAudio(buffer, ct)
+    if (transcript && transcript.trim().length > 0) {
+      return { text: transcript, debug: `audio_len=${transcript.length}; type=${ct}` }
+    }
+    throw new Error(
+      `Audio transcription failed or not configured. Ensure AZURE_SPEECH_REGION and AZURE_SPEECH_KEY are set and that audio is under the short-audio limits.`,
+    )
   }
 
   throw new Error(`Unsupported file type: .${ext}`)

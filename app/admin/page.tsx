@@ -382,13 +382,14 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Download className="w-5 h-5" />
-              Upload Knowledge Base (PDF / DOCX / MD / TXT)
+              Upload Knowledge Base (PDF / DOCX / MD / TXT / Audio)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Upload your private documentation to build a tenant-specific knowledge base.
-              Accepted types: .pdf, .docx, .md, .txt. Limits: 50MB per file, 100MB per upload.
+              Accepted types: .pdf, .docx, .md, .txt, and audio (.wav, .mp3, .ogg, .webm, .m4a).
+              Limits: 50MB per file, 100MB per upload.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -397,7 +398,7 @@ export default function AdminPage() {
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.docx,.md,.txt"
+                  accept=".pdf,.docx,.md,.txt,.wav,.mp3,.ogg,.webm,.m4a"
                   onChange={(e) => setUploadFiles(e.target.files)}
                   className="w-full border rounded-md px-3 py-2 bg-background"
                 />
