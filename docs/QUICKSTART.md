@@ -3,7 +3,8 @@
 A simple guide for stakeholders to run and try the Knowledge Base Assistant locally.
 
 ## What this is
-- A private, document‑grounded chatbot (RAG). Upload PDFs/DOCX/MD/TXT, then ask questions and get answers with sources.
+- A private, document‑grounded chatbot (RAG). Upload PDFs/DOCX/MD/TXT (and short audio clips), then ask questions and get answers with sources.
+  - Note: audio support is for short clips only via Azure Speech (REST). Video and long‑form audio are not included in this demo.
 
 ## Requirements
 - Node.js 20+
@@ -38,7 +39,7 @@ NEXT_TELEMETRY_DISABLED=1 npm run dev -- -p 3000
 
 ## Try it
 - Admin (upload): http://localhost:3000/admin
-  - Choose files (PDF/DOCX/MD/TXT), Start Upload
+  - Choose files (PDF/DOCX/MD/TXT; optional short audio: WAV/MP3/OGG/WEBM/M4A), Start Upload
   - Watch the progress bar and preview
 - Chat: http://localhost:3000
   - Ask questions and see sources
@@ -62,3 +63,4 @@ Add an iframe pointing to `/embed` (see README → Embed):
 ## Notes
 - Secrets are not committed: `.env.local` is git‑ignored.
 - The vector store is in‑memory for fast demos. For production, you’d swap in a managed vector DB and add auth.
+ - Audio: short clips only via Azure Speech. Video and long‑form audio are not supported in this demo to keep costs predictable.
