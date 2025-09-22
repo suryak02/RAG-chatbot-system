@@ -11,9 +11,9 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-foreground mb-4">OpenAI Documentation Assistant</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-4">Knowledge Base Assistant</h1>
             <p className="text-lg text-muted-foreground mb-6">
-              Get instant answers from OpenAI's official documentation using advanced RAG technology
+              Get instant answers from your documents using retrieval‑augmented generation (RAG)
             </p>
 
             {/* Quick Actions */}
@@ -39,7 +39,7 @@ export default function Home() {
           {/* Footer */}
           <div className="text-center mt-8 text-sm text-muted-foreground">
             <p>
-              Powered by OpenAI's GPT models and embeddings •
+              Powered by a secure LLM backend with RAG •
               <Link href="/admin" className="text-primary hover:underline ml-1">
                 Manage knowledge base
               </Link>

@@ -31,7 +31,17 @@ interface DocumentSource {
   relevanceScore: number
 }
 
-export function ChatInterface() {
+export function ChatInterface({
+  title = "Knowledge Base Assistant",
+  placeholder = "Ask about products, policies, APIs, best practices...",
+  heightClass,
+  hideHeader = false,
+}: {
+  title?: string
+  placeholder?: string
+  heightClass?: string
+  hideHeader?: boolean
+}) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -101,13 +111,15 @@ export function ChatInterface() {
   }
 
   return (
-    <Card className="w-full h-[75vh] md:h-[700px] flex flex-col">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="w-5 h-5" />
-          Knowledge Base Assistant
-        </CardTitle>
-      </CardHeader>
+    <Card className={`w-full ${heightClass ?? "h-[75vh] md:h-[700px]"} flex flex-col`}>
+      {!hideHeader && (
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5" />
+            {title}
+          </CardTitle>
+        </CardHeader>
+      )}
       <CardContent className="flex-1 min-h-0 flex flex-col gap-4">
         <div className="flex-1 pr-4 overflow-y-auto">
           <div className="space-y-6 pb-24">
@@ -229,7 +241,7 @@ export function ChatInterface() {
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about products, policies, APIs, best practices..."
+            placeholder={placeholder}
             disabled={isLoading}
             className="flex-1"
           />
