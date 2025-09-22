@@ -70,6 +70,25 @@ This repo includes `netlify.toml` (Node 20). After connecting your repo, set the
 - Secrets live in `.env.local` which is git‑ignored by default (`.env*`).
 - Never commit real keys; use `.env.example` as a template.
 
+## Embed
+
+Use the lightweight embed page at `/embed` to place the chat on another site.
+
+Example iframe:
+
+```html
+<iframe
+  src="https://<your-domain>/embed?placeholder=Ask%20about%20our%20services..."
+  width="100%"
+  height="600"
+  style="border: 0;"
+  loading="lazy"
+></iframe>
+```
+
+Query params:
+- `placeholder`: optional input placeholder text.
+
 ## Notes
 
 - The older "Documentation Ingestion" panel and API have been removed to keep the demo focused on uploads. The legacy endpoint under `app/api/admin/ingest/` has been removed.

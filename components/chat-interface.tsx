@@ -33,7 +33,7 @@ interface DocumentSource {
 
 export function ChatInterface({
   title = "Knowledge Base Assistant",
-  placeholder = "Ask about products, policies, APIs, best practices...",
+  placeholder = "Ask about products, policies, services, best practices...",
   heightClass,
   hideHeader = false,
 }: {
@@ -127,12 +127,12 @@ export function ChatInterface({
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg mb-2">Ask me anything about the knowledge base!</p>
-                <p className="text-sm mb-4">I can help you with product info, policies, APIs, best practices, and more.</p>
+                <p className="text-sm mb-4">I can help you with product info, policies, services, best practices, and more.</p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   <Badge variant="secondary">Hours & policies</Badge>
                   <Badge variant="secondary">Pricing & plans</Badge>
                   <Badge variant="secondary">Appointments</Badge>
-                  <Badge variant="secondary">API usage</Badge>
+                  <Badge variant="secondary">Services & bookings</Badge>
                 </div>
               </div>
             )}

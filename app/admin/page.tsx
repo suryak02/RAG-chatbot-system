@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
+import { Progress } from "@/components/ui/progress"
 import { Database, Download, RefreshCw, Clock } from "lucide-react"
 import Link from "next/link"
 
@@ -15,6 +16,8 @@ export default function AdminPage() {
   const [justRefreshed, setJustRefreshed] = useState(false)
   const [uploadFiles, setUploadFiles] = useState<FileList | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStage, setUploadStage] = useState<"idle" | "uploading" | "processing">("idle")
   const [clearNamespaceOnUpload, setClearNamespaceOnUpload] = useState(false)
   const [manualTitle, setManualTitle] = useState("")
   const [manualText, setManualText] = useState("")
@@ -87,14 +90,60 @@ export default function AdminPage() {
       }
 
       setIsUploading(true)
-      const response = await fetch("/api/admin/upload", {
-        method: "POST",
-        body: formData,
+      setUploadProgress(0)
+      setUploadStage("uploading")
+
+      // Use XMLHttpRequest to show upload progress events
+      const result = await new Promise<any>((resolve, reject) => {
+        try {
+          const xhr = new XMLHttpRequest()
+          xhr.open("POST", "/api/admin/upload")
+          xhr.responseType = "json"
+
+          let processingTimer: ReturnType<typeof setInterval> | null = null
+
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) {
+              const pct = Math.max(0, Math.min(100, Math.round((ev.loaded / ev.total) * 100)))
+              setUploadProgress(pct)
+            }
+          }
+          xhr.upload.onload = () => {
+            // Upload finished; server is processing
+            setUploadStage("processing")
+            // Drift progress slowly towards 90% while waiting for server
+            processingTimer = setInterval(() => {
+              setUploadProgress((p) => (p < 90 ? p + 1 : p))
+            }, 200)
+          }
+
+          xhr.onerror = () => {
+            if (processingTimer) clearInterval(processingTimer)
+            reject(new Error("Network error during upload"))
+          }
+          xhr.onabort = () => {
+            if (processingTimer) clearInterval(processingTimer)
+            reject(new Error("Upload aborted"))
+          }
+          xhr.onload = () => {
+            if (processingTimer) clearInterval(processingTimer)
+            setUploadProgress(100)
+            const res = xhr.response
+            if (!res || (xhr.status && xhr.status >= 400)) {
+              reject(new Error((res && res.error) || `Upload failed (${xhr.status})`))
+              return
+            }
+            resolve(res)
+          }
+
+          xhr.send(formData)
+        } catch (e) {
+          reject(e)
+        }
       })
 
-      const result = await response.json()
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || `Upload failed: ${response.statusText}`)
+      if (!result.success) {
+        throw new Error(result.error || `Upload failed`)
       }
 
       setUploadResult({
@@ -110,6 +159,7 @@ export default function AdminPage() {
       setUploadError(String(err))
     } finally {
       setIsUploading(false)
+      setUploadStage("idle")
     }
   }
 
@@ -378,6 +428,16 @@ export default function AdminPage() {
                 </>
               )}
             </Button>
+
+            {isUploading && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{uploadStage === "uploading" ? "Uploading" : "Processing"}</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <Progress value={uploadProgress} />
+              </div>
+            )}
 
             {uploadError && (
               <Alert variant="destructive">
