@@ -96,5 +96,4 @@ Query params:
 
 ## Notes
 
-- The older "Documentation Ingestion" panel and API have been removed to keep the demo focused on uploads. The legacy endpoint under `app/api/admin/ingest/` has been removed.
 - The vector store is in‑memory for demos. For production, plug in a managed vector DB and add auth + storage.
